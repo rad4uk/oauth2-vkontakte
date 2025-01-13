@@ -1,6 +1,7 @@
 {
     "name": "radchuk/oauth2-vkontakte",
     "description": "Vkontakte provider for league/oauth2-client",
+    "minimum-stability": "dev",
     "keywords": [
         "league",
         "package"
@@ -9,7 +10,7 @@
     "authors": [
         {
             "name": "rad4uk",
-            "email": "yury.radchuk@gmail.com"
+            "email": "yurij.radchuk@gmail.com"
         }
     ],
     "require": {
