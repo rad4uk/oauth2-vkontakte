@@ -9,19 +9,19 @@ use Psr\Http\Message\ResponseInterface;
 
 class Vkontakte extends AbstractProvider
 {
-    protected $baseOAuthUri = 'https://oauth.vk.com';
-    protected $baseUri      = 'https://api.vk.com/method';
-    protected $version      = '5.52';
-    protected $language     = null;
+    protected string $baseOAuthUri = 'https://oauth.vk.com';
+    protected string $baseUri = 'https://api.vk.com/method';
+    protected string $version = '5.199';
+    protected ?string $language = null;
 
     /**
      * @type array
      * @see https://vk.com/dev/permissions
      */
-    public $scopes = [
+    public array $scopes = [
         'email',
-        'friends',
-        'offline',
+//        'friends',
+//        'offline',
         //'photos',
         //'wall',
         //'ads',
@@ -43,7 +43,7 @@ class Vkontakte extends AbstractProvider
      * @type array
      * @see https://new.vk.com/dev/fields
      */
-    public $userFields = [
+    public array $userFields = [
         'bdate',
         'city',
         'country',
@@ -115,53 +115,57 @@ class Vkontakte extends AbstractProvider
     /**
      * @param string $language
      */
-    public function setLanguage($language)
+    public function setLanguage($language): self
     {
         $this->language = (string)$language;
 
         return $this;
     }
 
-    public function getBaseAuthorizationUrl()
+    public function getBaseAuthorizationUrl(): string
     {
         return "$this->baseOAuthUri/authorize";
     }
-    public function getBaseAccessTokenUrl(array $params)
+
+    public function getBaseAccessTokenUrl(array $params): string
     {
         return "$this->baseOAuthUri/access_token";
     }
-    public function getResourceOwnerDetailsUrl(AccessToken $token)
+
+    public function getResourceOwnerDetailsUrl(AccessToken $token): string
     {
         $params = [
-            'fields'       => $this->userFields,
+            'fields' => $this->userFields,
             'access_token' => $token->getToken(),
-            'v'            => $this->version,
-            'lang'         => $this->language
+            'v' => $this->version,
+            'lang' => $this->language
         ];
-        $query  = $this->buildQueryString($params);
-        $url    = "$this->baseUri/users.get?$query";
+        $query = $this->buildQueryString($params);
+        $url = "$this->baseUri/users.get?$query";
 
         return $url;
     }
-    protected function getDefaultScopes()
+
+    protected function getDefaultScopes(): array
     {
         return $this->scopes;
     }
-    protected function checkResponse(ResponseInterface $response, $data)
+
+    protected function checkResponse(ResponseInterface $response, $data): void
     {
         // Metadata info
         $contentTypeRaw = $response->getHeader('Content-Type');
         $contentTypeArray = explode(';', reset($contentTypeRaw));
         $contentType = reset($contentTypeArray);
         // Response info
-        $responseCode    = $response->getStatusCode();
+        $responseCode = $response->getStatusCode();
         $responseMessage = $response->getReasonPhrase();
         // Data info
-        $error            = !empty($data['error']) ? $data['error'] : null;
-        $errorCode        = !empty($error['error_code']) ? $error['error_code'] : $responseCode;
+        $error = !empty($data['error']) ? $data['error'] : null;
+        $errorCode = !empty($error['error_code']) ? $error['error_code'] : $responseCode;
         $errorDescription = !empty($data['error_description']) ? $data['error_description'] : null;
-        $errorMessage     = !empty($error['error_msg']) ? $error['error_msg'] : $errorDescription;
-        $message          = $errorMessage ?: $responseMessage;
+        $errorMessage = !empty($error['error_msg']) ? $error['error_msg'] : $errorDescription;
+        $message = $errorMessage ?: $responseMessage;
 
         // Request/meta validation
         if (399 < $responseCode) {
@@ -176,9 +180,10 @@ class Vkontakte extends AbstractProvider
             throw new IdentityProviderException($errorMessage, $errorCode, $data);
         }
     }
-    protected function createResourceOwner(array $response, AccessToken $token)
+
+    protected function createResourceOwner(array $response, AccessToken $token): User
     {
-        $response   = reset($response['response']);
+        $response = reset($response['response']);
         $additional = $token->getValues();
         if (!empty($additional['email'])) {
             $response['email'] = $additional['email'];
@@ -190,68 +195,70 @@ class Vkontakte extends AbstractProvider
             $response['id'] = $additional['user_id'];
         }
 
-        return new User($response, $response['id']);
+        return new User($response);
     }
 
     /**
      * @see https://vk.com/dev/users.get
      *
-     * @param integer[]        $ids
+     * @param integer[] $ids
      * @param AccessToken|null $token Current user if empty
-     * @param array            $params
+     * @param array $params
      *
      * @return User[]
      */
-    public function usersGet(array $ids = [], AccessToken $token = null, array $params = [])
+    public function usersGet(array $ids = [], AccessToken $token = null, array $params = []): array
     {
         if (empty($ids) && !$token) {
             throw new \InvalidArgumentException('Some of parameters usersIds OR access_token are required');
         }
 
         $default = [
-            'user_ids'     => implode(',', $ids),
-            'fields'       => $this->userFields,
-            'access_token' => $token ? $token->getToken() : null,
-            'v'            => $this->version,
-            'lang'         => $this->language
+            'user_ids' => implode(',', $ids),
+            'fields' => $this->userFields,
+            'access_token' => $token?->getToken(),
+            'v' => $this->version,
+            'lang' => $this->language
         ];
-        $params  = array_merge($default, $params);
-        $query   = $this->buildQueryString($params);
-        $url     = "$this->baseUri/users.get?$query";
+        $params = array_merge($default, $params);
+        $query = $this->buildQueryString($params);
+        $url = "$this->baseUri/users.get?$query";
 
-        $response   = $this->getResponse($this->createRequest(static::METHOD_GET, $url, $token, []))['response'];
-        $users      = !empty($response['items']) ? $response['items'] : $response;
-        $array2user = function ($userData) {
+        $response = $this->getResponse($this->createRequest(static::METHOD_GET, $url, $token, []))->getBody()->getContents();
+
+        $users = json_decode($response, true)['response'];
+        $array2user = static function ($userData) {
             return new User($userData);
         };
 
         return array_map($array2user, $users);
     }
+
     /**
      * @see https://vk.com/dev/friends.get
      *
-     * @param integer          $userId
+     * @param integer $userId
      * @param AccessToken|null $token
-     * @param array            $params
+     * @param array $params
      *
      * @return User[]
      */
-    public function friendsGet($userId, AccessToken $token = null, array $params = [])
+    public function friendsGet($userId, AccessToken $token = null, array $params = []): array
     {
         $default = [
-            'user_id'      => $userId,
-            'fields'       => $this->userFields,
+            'user_id' => $userId,
+            'fields' => $this->userFields,
             'access_token' => $token ? $token->getToken() : null,
-            'v'            => $this->version,
-            'lang'         => $this->language
+            'v' => $this->version,
+            'lang' => $this->language
         ];
-        $params  = array_merge($default, $params);
-        $query   = $this->buildQueryString($params);
-        $url     = "$this->baseUri/friends.get?$query";
+        $params = array_merge($default, $params);
+        $query = $this->buildQueryString($params);
+        $url = "$this->baseUri/friends.get?$query";
 
-        $response     = $this->getResponse($this->createRequest(static::METHOD_GET, $url, $token, []))['response'];
-        $friends      = !empty($response['items']) ? $response['items'] : $response;
-        $array2friend = function ($friendData) {
+        $response = $this->getResponse($this->createRequest(static::METHOD_GET, $url, $token, []))->getBody()->getContents();
+        $friends = json_decode($response, true)['response'];
+        $array2friend = static function ($friendData) {
             if (is_numeric($friendData)) {
                 $friendData = ['id' => $friendData];
             }
